@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+
+<div class="container my-5">
+    <h1 class="mb-4">Plan: {{ plan.nazwa }}</h1>
+
+    {% if plan.opis %}
+        <p><strong>Opis:</strong> {{ plan.opis }}</p>
+    {% endif %}
+
+    {% for etap in plan.etapy.all %}
+        <div class="card my-5">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">{{ etap.kolejnosc }}. {{ etap.nazwa }}</h4>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush mb-3">
+                    {% for el in etap.elementy.all %}
+                        <li class="list-group-item">
+                            <strong>{{ el.kolejnosc }}. {{ el.atrakcja.nazwa }}</strong><br>
+                            <small>
+                                Czas zwiedzania: {{ el.czas_wizyty }} min<br>
+                                Dojazd: {{ el.czas_dojazdu|default:"–" }} min
+                            </small>
+                        </li>
+                    {% empty %}
+                        <li class="list-group-item text-muted">Brak atrakcji w tym etapie</li>
+                    {% endfor %}
+                </ul>
+
+                {% if etap.elementy.count > 1 %}
+                    <label for="mode-{{ etap.id }}">Tryb podróży:</label>
+                    <select id="mode-{{ etap.id }}" class="form-select mb-2" style="max-width: 200px;">
+                        <option value="DRIVING">Samochód</option>
+                        <option value="WALKING">Pieszo</option>
+                        <option value="BICYCLING">Rower</option>
+                    </select>
+
+                    <div id="map-{{ etap.id }}" style="height: 400px; width: 100%;"></div>
+                {% endif %}
+
+                <!-- JSON z punktami -->
+                <script id="points-etap-{{ etap.id }}" type="application/json">
+                [
+                    {% for el in etap.elementy.all %}
+                        {% if el.atrakcja.lokalizacja %}
+                            {
+                                "name": "{{ el.atrakcja.nazwa|escapejs }}",
+                                "lat": {{ el.atrakcja.lokalizacja.szerokosc_geo|stringformat:"f"|cut:"," }},
+                                "lng": {{ el.atrakcja.lokalizacja.dlugosc_geo|stringformat:"f"|cut:"," }}
+                            }{% if not forloop.last %},{% endif %}
+                        {% endif %}
+                    {% endfor %}
+                ]
+                </script>
+            </div>
+        </div>
+    {% endfor %}
+
+    <div class="mt-4">
+        <a href="{% url 'profile' %}" class="btn btn-secondary me-2">← Wróć do profilu</a>
+        <a href="{% url 'plany:export_plan_pdf' plan.id %}" class="btn btn-outline-primary">📄 Eksportuj do PDF</a>
+    </div>
+</div>
+
+<!-- Google Maps API -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initAllMaps" async defer></script>
+
+<script>
+function initAllMaps() {
+    document.querySelectorAll('[id^="points-etap-"]').forEach(script => {
+        const etapId = script.id.replace('points-etap-', '');
+        const points = JSON.parse(script.textContent);
+        if (points.length < 2) return;
+
+        const mapContainer = document.getElementById('map-' + etapId);
+        const modeSelector = document.getElementById('mode-' + etapId);
+        const infoDiv = document.createElement("div");
+        infoDiv.classList.add("text-muted", "mt-2");
+        mapContainer.insertAdjacentElement("afterend", infoDiv);
+
+        const map = new google.maps.Map(mapContainer, {
+            zoom: 13,
+            center: { lat: points[0].lat, lng: points[0].lng }
+        });
+
+        const directionsService = new google.maps.DirectionsService();
+        const directionsRenderer = new google.maps.DirectionsRenderer({ suppressMarkers: true });
+        directionsRenderer.setMap(map);
+
+        function drawRoute() {
+            directionsService.route({
+                origin: points[0],
+                destination: points[points.length - 1],
+                waypoints: points.slice(1, -1).map(p => ({ location: p, stopover: true })),
+                optimizeWaypoints: false,
+                travelMode: google.maps.TravelMode[modeSelector.value]
+            }, (response, status) => {
+                if (status === 'OK') {
+                    directionsRenderer.setDirections(response);
+                    points.forEach(p => {
+                        new google.maps.Marker({
+                            position: { lat: p.lat, lng: p.lng },
+                            map: map,
+                            title: p.name
+                        });
+                    });
+
+                    const legs = response.routes[0].legs;
+                    const totalSeconds = legs.reduce((sum, leg) => sum + leg.duration.value, 0);
+                    const totalMinutes = Math.round(totalSeconds / 60);
+                    infoDiv.textContent = `⏱️ Szacowany czas przejazdu: ${totalMinutes} minut`;
+                } else {
+                    directionsRenderer.setDirections({ routes: [] });
+                    infoDiv.textContent = "⚠️ Nie udało się wyznaczyć trasy.";
+                }
+            });
+        }
+
+        drawRoute();
+        modeSelector.addEventListener("change", drawRoute);
+    });
+}
+</script>
+{% endblock %}

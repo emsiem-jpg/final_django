@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load range_tags %}
+{% block content %}
+<div class="container mt-4">
+    <h1>🛒 Twój koszyk atrakcji</h1>
+
+    {% if atrakcje %}
+        <ul class="list-group mb-4">
+            {% for atrakcja in atrakcje %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ atrakcja.nazwa }}</strong><br>
+                        <small class="text-muted">{{ atrakcja.kategoria.nazwa }}</small>
+                    </div>
+                    <form method="post" action="{% url 'plany:usun_z_koszyka' atrakcja.id %}" class="m-0">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+
+        <form method="post" action="{% url 'plany:zapisz_plan' %}">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label for="nazwa" class="form-label">Nazwa planu</label>
+                <input type="text" name="nazwa" id="nazwa" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="liczba_dni" class="form-label">Liczba dni</label>
+                <input type="number" name="liczba_dni" id="liczba_dni" class="form-control" min="1" value="1" required onchange="updateDzienSelects(this.value)">
+            </div>
+
+            <h5>Przypisz atrakcje do dni:</h5>
+            {% for atrakcja in atrakcje %}
+                <div class="mb-2">
+                    <label><strong>{{ atrakcja.nazwa }}</strong> - Dzień:</label>
+                    <select name="dzien_{{ atrakcja.id }}" class="form-select dzien-select" required>
+                        {% for i in 1|to_range:10 %}
+                            <option value="{{ i }}">Dzień {{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% endfor %}
+
+            <button type="submit" class="btn btn-primary mt-3">📅 Zapisz plan zwiedzania</button>
+        </form>
+
+        <script>
+            function updateDzienSelects(liczbaDni) {
+                const selects = document.querySelectorAll(".dzien-select");
+                selects.forEach(select => {
+                    select.innerHTML = "";
+                    for (let i = 1; i <= liczbaDni; i++) {
+                        const option = document.createElement("option");
+                        option.value = i;
+                        option.textContent = `Dzień ${i}`;
+                        select.appendChild(option);
+                    }
+                });
+            }
+        </script>
+    {% else %}
+        <div class="alert alert-info">
+            Twój koszyk jest pusty. Wybierz atrakcje z listy lub ze szczegółów atrakcji.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

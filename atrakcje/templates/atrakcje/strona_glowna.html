@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Strona Główna{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: linear-gradient(to bottom right, #f8f9fa, #e3f2fd);
+    }
+
+    h1 {
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 40px;
+        font-weight: bold;
+    }
+
+    .how-it-works {
+        padding: 30px 0;
+    }
+
+    .how-it-works i {
+        transition: transform 0.3s ease;
+    }
+
+    .how-it-works i:hover {
+        transform: scale(1.2);
+    }
+
+    .start-btn {
+        display: inline-block;
+        margin-top: 30px;
+        font-size: 1.25rem;
+        padding: 15px 30px;
+    }
+
+    .glass-box {
+        background: rgba(255, 255, 255, 0.85);
+        border-radius: 15px;
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        padding: 40px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="glass-box">
+        <h1>Przewodnik</h1>
+
+        <div class="row text-center how-it-works">
+            <div class="col-md-3">
+                <i class="fas fa-map-marker-alt fa-3x mb-3 text-primary"></i>
+                <h5>Krok 1: Przeglądaj atrakcje</h5>
+                <p>Odkrywaj ciekawe miejsca i inspiracje turystyczne.</p>
+            </div>
+            <div class="col-md-3">
+                <i class="fas fa-heart fa-3x mb-3 text-success"></i>
+                <h5>Krok 2: Dodaj do koszyka</h5>
+                <p>Wybierz atrakcje, które chcesz odwiedzić.</p>
+            </div>
+            <div class="col-md-3">
+                <i class="fas fa-route fa-3x mb-3 text-warning"></i>
+                <h5>Krok 3: Zapisz plan</h5>
+                <p>Stwórz własny plan zwiedzania na kilka dni.</p>
+            </div>
+            <div class="col-md-3">
+                <i class="fas fa-file-pdf fa-3x mb-3 text-danger"></i>
+                <h5>Krok 4: Eksportuj do PDF</h5>
+                <p>Wydrukuj gotową trasę i ruszaj w drogę!</p>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <a href="{% url 'lista_atrakcji' %}" class="btn btn-primary start-btn">
+                🔍 Zacznij przeglądać atrakcje
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

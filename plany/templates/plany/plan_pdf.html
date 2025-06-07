@@ -1,0 +1,103 @@
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Plan zwiedzania – {{ plan.nazwa }}</title>
+    <style>
+        body {
+            font-family: "DejaVu Sans", Arial, sans-serif;
+            margin: 30px;
+            color: #2c3e50;
+        }
+        h1 {
+            font-size: 22px;
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 6px;
+        }
+        h2 {
+            font-size: 18px;
+            margin-top: 24px;
+            color: #34495e;
+        }
+        h3 {
+            font-size: 16px;
+            margin-top: 10px;
+            color: #2c3e50;
+        }
+        p {
+            font-size: 14px;
+            margin: 6px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .map {
+            margin: 20px 0;
+            width: 100%;
+            height: auto;
+        }
+        .meta {
+            font-size: 12px;
+            color: #666;
+        }
+        .etap-box {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-left: 5px solid #2980b9;
+            background-color: #f9f9f9;
+        }
+        .attraction {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Plan zwiedzania: {{ plan.nazwa }}</h1>
+
+    {% if plan.opis %}
+        <p><strong>Opis:</strong> {{ plan.opis }}</p>
+    {% endif %}
+
+    {% if static_map_url %}
+        <h2>Mapa trasy</h2>
+        <img src="{{ static_map_url }}" alt="Mapa atrakcji" class="map">
+    {% endif %}
+
+    {% for etap in plan.etapy.all %}
+    <div class="etap-box">
+        <h2>{{ etap.kolejnosc }}. {{ etap.nazwa }}</h2>
+        <ul>
+            {% for el in etap.elementy.all %}
+                <li class="attraction">
+                    <strong>{{ el.kolejnosc }}. {{ el.atrakcja.nazwa }}</strong><br>
+                    <span class="meta">
+                        Czas zwiedzania: {{ el.czas_wizyty }} min |
+                        Dojazd: {{ el.czas_dojazdu|default:"–" }} min
+                    </span>
+                </li>
+            {% endfor %}
+        </ul>
+
+        {% if mapy_etapow|get_item:etap.id %}
+            <p style="font-size: 10px; color: gray;">
+                Mapa base64: {{ mapy_etapow|get_item:etap.id|slice:":100" }}...
+            </p>
+            <img src="{{ mapy_etapow|get_item:etap.id }}" alt="Mapa etapu" class="map">
+        {% else %}
+            <p style="color: red;">⚠️ Brak mapy dla etapu {{ etap.kolejnosc }}</p>
+        {% endif %}
+
+
+    </div>
+{% endfor %}
+
+
+</body>
+</html>

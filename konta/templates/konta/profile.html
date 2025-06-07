@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Twój profil</h2>
+<div class="profile-info">
+    <p><strong>Nazwa użytkownika:</strong> {{ user.username }}</p>
+    <p><strong>Email:</strong> {{ user.email }}</p>
+    <!-- Dodatkowe pola profilu -->
+</div>
+
+<h2>Moje plany zwiedzania</h2>
+
+{% if moje_plany %}
+    <ul>
+        {% for relacja in moje_plany %}
+            <li style="margin-bottom: 10px;">
+                <a href="{% url 'plany:szczegoly_planu' relacja.plan.id %}">
+                    {{ relacja.plan.nazwa }}
+                </a>
+                – {{ relacja.plan.data_utworzenia|date:"Y-m-d" }}
+                {% if relacja.jest_wlascicielem %}
+                    <span class="badge bg-primary">właściciel</span>
+
+                    <!-- Przycisk usuń -->
+                    <form method="post" action="{% url 'plany:usun_plan' relacja.plan.id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-danger"
+                                onclick="return confirm('Na pewno usunąć ten plan?');">
+                            Usuń
+                        </button>
+                    </form>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>Nie masz jeszcze żadnych planów.</p>
+{% endif %}
+{% endblock %}

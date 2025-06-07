@@ -1,0 +1,28 @@
+# Ignoruj środowisko wirtualne
+venv/
+
+# Pliki Pythona
+__pycache__/
+*.py[cod]
+*.so
+
+# Logi i tymczasowe dane
+*.log
+*.pot
+*.pyc
+*.pyo
+*.sqlite3
+
+# Pliki środowiskowe
+.env
+.env.*
+
+# Systemowe
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# WeasyPrint cache
+weasyprint/

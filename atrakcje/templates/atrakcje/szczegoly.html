@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ atrakcja.nazwa }}</h1>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <!-- Sekcja informacji -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Informacje</h5>
+                    <p class="card-text">
+                        <strong>Kategoria:</strong> {{ atrakcja.kategoria.nazwa }}<br>
+                        <strong>Czas zwiedzania:</strong> {{ atrakcja.czas_zwiedzania }} minut
+                    </p>
+                    <p class="card-text">{{ atrakcja.opis }}</p>
+
+                    <!-- ✅ PRZYCISK DODAJ DO KOSZYKA -->
+                    <form method="post" action="{% url 'plany:dodaj_do_koszyka' atrakcja.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success">
+                            🛒 Dodaj do koszyka
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {% if ceny %}
+            <!-- Sekcja cennika -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Cennik</h5>
+                    <ul class="list-unstyled">
+                        {% for rodzaj, kwota, waluta in ceny %}
+                        <li><strong>{{ rodzaj }}:</strong> {{ kwota }} {{ waluta }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if atrakcja.zdjecie %}
+            <div class="card mb-4">
+                <img src="{{ atrakcja.zdjecie.url }}" class="card-img-top" alt="{{ atrakcja.nazwa }}">
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-6">
+            <!-- Sekcja mapy -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Lokalizacja</h5>
+                    <p><strong>Adres:</strong> {{ atrakcja.adres }}</p>
+                    <div id="map" style="height: 400px; width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mapy i debug -->
+<script>
+function initMap() {
+    var lat = parseFloat("{{ atrakcja.lokalizacja.szerokosc_geo }}".replace(",", "."));
+    var lng = parseFloat("{{ atrakcja.lokalizacja.dlugosc_geo }}".replace(",", "."));
+    var location = { lat: lat, lng: lng };
+    var map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 15,
+        center: location,
+        mapTypeId: google.maps.MapTypeId.ROADMAP
+    });
+    var marker = new google.maps.Marker({
+        position: location,
+        map: map,
+        title: "{{ atrakcja.nazwa|escapejs }}"
+    });
+    var infoContent = '<h5>{{ atrakcja.nazwa|escapejs }}</h5>' +
+                      '<p>{{ atrakcja.adres|escapejs }}</p>';
+    var infoWindow = new google.maps.InfoWindow({ content: infoContent });
+    marker.addListener('click', function() {
+        infoWindow.open(map, marker);
+    });
+}
+function loadGoogleMaps() {
+    var script = document.createElement('script');
+    script.src = 'https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+}
+window.onload = loadGoogleMaps;
+</script>
+
+<script>
+console.log("Nazwa:", "{{ atrakcja.nazwa|escapejs }}");
+console.log("Lat:", "{{ atrakcja.lokalizacja.szerokosc_geo|safe }}");
+console.log("Lng:", "{{ atrakcja.lokalizacja.dlugosc_geo|safe }}");
+</script>
+{% endblock %}

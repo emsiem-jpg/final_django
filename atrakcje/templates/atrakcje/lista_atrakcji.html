@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block title %}Lista atrakcji{% endblock %}
+
+{% block extra_css %}
+<style>
+    .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        text-decoration: none;
+        color: #2c3e50;
+        font-weight: 500;
+    }
+    .atrakcja-list {
+        list-style: none;
+        padding: 0;
+        margin-top: 30px;
+    }
+    .atrakcja-item {
+        padding: 20px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        transition: background-color 0.2s ease;
+    }
+    .atrakcja-item:hover {
+        background-color: #f8f9fa;
+    }
+    .atrakcja-info {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .atrakcja-icon {
+        margin-right: 15px;
+        font-size: 24px;
+        width: 30px;
+        text-align: center;
+        color: #3498db;
+    }
+    .atrakcja-text {
+        font-size: 18px;
+        font-weight: 600;
+        text-decoration: none;
+        color: #2c3e50;
+    }
+    .atrakcja-text:hover {
+        text-decoration: underline;
+    }
+    .kategoria-text {
+        font-size: 14px;
+        color: #888;
+    }
+    .cena-info {
+        font-size: 16px;
+        color: #444;
+        margin-top: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'strona_glowna' %}" class="back-link">
+    <i class="fas fa-arrow-left"></i> Powrót do menu głównego
+</a>
+
+<h1>Lista atrakcji</h1>
+
+<form method="get" style="margin-bottom: 20px;">
+    <label>Miasto:
+        <input type="text" name="miasto" value="{{ miasto }}">
+    </label>
+    <button type="submit">Filtruj</button>
+</form>
+
+<ul class="atrakcja-list">
+    {% for atrakcja in atrakcje %}
+        <li class="atrakcja-item">
+            <div class="atrakcja-info">
+                <div class="atrakcja-icon">
+                    {% if atrakcja.kategoria.ikona %}
+                        <i class="{{ atrakcja.kategoria.ikona }}"></i>
+                    {% else %}
+                        <i class="fas fa-map-marker-alt"></i>
+                    {% endif %}
+                </div>
+                <div>
+                    <a href="{% url 'szczegoly' atrakcja.id %}" class="atrakcja-text">
+                        {{ atrakcja.nazwa }}
+                    </a><br>
+                    <span class="kategoria-text">
+                        {{ atrakcja.kategoria.nazwa }}
+                        {% if atrakcja.lokalizacja %} — {{ atrakcja.lokalizacja.miasto }}{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="cena-info">
+                {% if statystyki_dict.atrakcja.id %}
+                    Cena od: {{ statystyki_dict.atrakcja.id.min_cena }} zł
+                {% else %}
+                    Bezpłatne
+                {% endif %}
+            </div>
+        </li>
+    {% endfor %}
+</ul>
+<div class="pagination mt-4">
+    <nav aria-label="Paginacja">
+        <ul class="pagination justify-content-center">
+            {% if atrakcje.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ atrakcje.previous_page_number }}&miasto={{ miasto }}">«</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">«</span></li>
+            {% endif %}
+
+            {% for num in atrakcje.paginator.page_range %}
+                {% if atrakcje.number == num %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                {% elif num > atrakcje.number|add:'-3' and num < atrakcje.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}&miasto={{ miasto }}">{{ num }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if atrakcje.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ atrakcje.next_page_number }}&miasto={{ miasto }}">»</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">»</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+
+{% endblock %}
