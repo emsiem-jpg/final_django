@@ -1,13 +1,18 @@
+{# 
+    Template: szczegoly_planu.html
+    Description: Displays detailed information about a sightseeing plan, including:
+        - Each stage (etap) with attractions,
+        - Estimated visit and travel times,
+        - Interactive Google Maps for route visualization,
+        - Export to PDF option.
+#}
 {% extends "base.html" %}
 {% load static %}
+{% load custom_filters %}
 {% block content %}
 
 <div class="container my-5">
     <h1 class="mb-4">Plan: {{ plan.nazwa }}</h1>
-
-    {% if plan.opis %}
-        <p><strong>Opis:</strong> {{ plan.opis }}</p>
-    {% endif %}
 
     {% for etap in plan.etapy.all %}
         <div class="card my-5">
@@ -15,6 +20,21 @@
                 <h4 class="mb-0">{{ etap.kolejnosc }}. {{ etap.nazwa }}</h4>
             </div>
             <div class="card-body">
+
+                {% with etap_info|get_item:etap.id as etap_dane %}
+                    {% if etap_dane %}
+                        <p>
+                            <strong>Łączny czas zwiedzania:</strong>
+                            {{ etap_dane.czas_zwiedzania }} minut<br>
+                            <strong>Łączny czas dojazdu:</strong>
+                            {{ etap_dane.czas_dojazdu }} minut<br>
+                            <strong>Całkowity czas etapu:</strong>
+                            {{ etap_dane.czas_laczny }} minut
+                        </p>
+                    {% endif %}
+                {% endwith %}
+
+
                 <ul class="list-group list-group-flush mb-3">
                     {% for el in etap.elementy.all %}
                         <li class="list-group-item">
@@ -29,7 +49,7 @@
                     {% endfor %}
                 </ul>
 
-                {% if etap.elementy.count > 1 %}
+                {% if mapy_etapow|get_item:etap.id|length > 1 %}
                     <label for="mode-{{ etap.id }}">Tryb podróży:</label>
                     <select id="mode-{{ etap.id }}" class="form-select mb-2" style="max-width: 200px;">
                         <option value="DRIVING">Samochód</option>
@@ -38,33 +58,31 @@
                     </select>
 
                     <div id="map-{{ etap.id }}" style="height: 400px; width: 100%;"></div>
-                {% endif %}
 
-                <!-- JSON z punktami -->
-                <script id="points-etap-{{ etap.id }}" type="application/json">
-                [
-                    {% for el in etap.elementy.all %}
-                        {% if el.atrakcja.lokalizacja %}
+                    <script id="points-etap-{{ etap.id }}" type="application/json">
+                    [
+                        {% for punkt in mapy_etapow|get_item:etap.id %}
                             {
-                                "name": "{{ el.atrakcja.nazwa|escapejs }}",
-                                "lat": {{ el.atrakcja.lokalizacja.szerokosc_geo|stringformat:"f"|cut:"," }},
-                                "lng": {{ el.atrakcja.lokalizacja.dlugosc_geo|stringformat:"f"|cut:"," }}
+                                "name": "{% if punkt.label == 'S' %}Start{% else %}{{ punkt.label }}{% endif %}",
+                                "lat": {{ punkt.lat|stringformat:"f"|cut:"," }},
+                                "lng": {{ punkt.lng|stringformat:"f"|cut:"," }},
+                                "label": "{{ punkt.label }}"
                             }{% if not forloop.last %},{% endif %}
-                        {% endif %}
-                    {% endfor %}
-                ]
-                </script>
+                        {% endfor %}
+                    ]
+                    </script>
+
+                {% endif %}
             </div>
         </div>
     {% endfor %}
 
     <div class="mt-4">
-        <a href="{% url 'profile' %}" class="btn btn-secondary me-2">← Wróć do profilu</a>
+        <a href="{% url 'konta:profile' %}" class="btn btn-secondary me-2">← Wróć do profilu</a>
         <a href="{% url 'plany:export_plan_pdf' plan.id %}" class="btn btn-outline-primary">📄 Eksportuj do PDF</a>
     </div>
 </div>
 
-<!-- Google Maps API -->
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initAllMaps" async defer></script>
 
 <script>
@@ -90,37 +108,44 @@ function initAllMaps() {
         directionsRenderer.setMap(map);
 
         function drawRoute() {
-            directionsService.route({
-                origin: points[0],
-                destination: points[points.length - 1],
-                waypoints: points.slice(1, -1).map(p => ({ location: p, stopover: true })),
-                optimizeWaypoints: false,
-                travelMode: google.maps.TravelMode[modeSelector.value]
-            }, (response, status) => {
-                if (status === 'OK') {
-                    directionsRenderer.setDirections(response);
-                    points.forEach(p => {
-                        new google.maps.Marker({
-                            position: { lat: p.lat, lng: p.lng },
-                            map: map,
-                            title: p.name
-                        });
-                    });
+    if (points.length < 2) {
+        infoDiv.textContent = "Za mało punktów do wyznaczenia trasy.";
+        return;
+    }
 
-                    const legs = response.routes[0].legs;
-                    const totalSeconds = legs.reduce((sum, leg) => sum + leg.duration.value, 0);
-                    const totalMinutes = Math.round(totalSeconds / 60);
-                    infoDiv.textContent = `⏱️ Szacowany czas przejazdu: ${totalMinutes} minut`;
-                } else {
-                    directionsRenderer.setDirections({ routes: [] });
-                    infoDiv.textContent = "⚠️ Nie udało się wyznaczyć trasy.";
-                }
+    directionsService.route({
+        origin: points[0],
+        destination: points[points.length - 1],
+        waypoints: points.length > 2 ? points.slice(1, -1).map(p => ({ location: p, stopover: true })) : [],
+        optimizeWaypoints: false,
+        travelMode: google.maps.TravelMode[modeSelector.value]
+    }, (response, status) => {
+        if (status === 'OK') {
+            directionsRenderer.setDirections(response);
+            points.forEach(p => {
+                new google.maps.Marker({
+                    position: { lat: p.lat, lng: p.lng },
+                    map: map,
+                    title: p.label === "S" ? "Start" : p.name,
+                    icon: p.label === "S" ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png" : undefined
+                });
             });
+
+            const totalSeconds = response.routes[0].legs.reduce((sum, leg) => sum + leg.duration.value, 0);
+            const totalMinutes = Math.round(totalSeconds / 60);
+            infoDiv.textContent = `Szacowany czas trasy: ${totalMinutes} minut`;
+        } else {
+            directionsRenderer.setDirections({ routes: [] });
+            infoDiv.textContent = "Nie udało się wyznaczyć trasy.";
         }
+    });
+}
+
 
         drawRoute();
         modeSelector.addEventListener("change", drawRoute);
     });
 }
 </script>
+
 {% endblock %}

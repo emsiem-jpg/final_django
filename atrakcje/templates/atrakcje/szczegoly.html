@@ -3,10 +3,11 @@
 {% block content %}
 <div class="container mt-4">
     <h1>{{ atrakcja.nazwa }}</h1>
-    
+
     <div class="row">
+        <!-- Lewa kolumna: Informacje o atrakcji -->
         <div class="col-md-6">
-            <!-- Sekcja informacji -->
+            <!-- Informacje -->
             <div class="card mb-4">
                 <div class="card-body">
                     <h5 class="card-title">Informacje</h5>
@@ -16,7 +17,7 @@
                     </p>
                     <p class="card-text">{{ atrakcja.opis }}</p>
 
-                    <!-- ✅ PRZYCISK DODAJ DO KOSZYKA -->
+                    <!-- Dodaj do koszyka -->
                     <form method="post" action="{% url 'plany:dodaj_do_koszyka' atrakcja.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-success">
@@ -26,41 +27,90 @@
                 </div>
             </div>
 
-            {% if ceny %}
-            <!-- Sekcja cennika -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Cennik</h5>
-                    <ul class="list-unstyled">
-                        {% for rodzaj, kwota, waluta in ceny %}
-                        <li><strong>{{ rodzaj }}:</strong> {{ kwota }} {{ waluta }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
-            {% endif %}
+            <!-- Zdjęcie główne (jeśli istnieje) -->
+            {% with atrakcja.zdjecia.all as zdjecia %}
+              {% if zdjecia %}
+                {% for foto in zdjecia %}
+                    {% if foto.is_glowne %}
+                    <div class="card mb-4">
+                        <img src="{{ foto.zdjecie.url }}" class="card-img-top"
+                             alt="{{ foto.opis|default:atrakcja.nazwa }}">
+                    </div>
+                    {% endif %}
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
 
-            {% if atrakcja.zdjecie %}
-            <div class="card mb-4">
-                <img src="{{ atrakcja.zdjecie.url }}" class="card-img-top" alt="{{ atrakcja.nazwa }}">
-            </div>
-            {% endif %}
-        </div>
-        
-        <div class="col-md-6">
-            <!-- Sekcja mapy -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Lokalizacja</h5>
-                    <p><strong>Adres:</strong> {{ atrakcja.adres }}</p>
-                    <div id="map" style="height: 400px; width: 100%;"></div>
+            <!-- Galeria zdjęć -->
+            {% with atrakcja.zdjecia.all as zdjecia %}
+              {% if zdjecia %}
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Galeria zdjęć</h5>
+                        <div class="row">
+                            {% for foto in zdjecia %}
+                                {% if not foto.is_glowne %}
+                                <div class="col-6 col-md-4 mb-3">
+                                    <img src="{{ foto.zdjecie.url }}" class="img-fluid rounded border shadow-sm"
+                                         alt="{{ foto.opis|default:atrakcja.nazwa }}">
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
                 </div>
-            </div>
+              {% endif %}
+            {% endwith %}
+        </div>
+
+<!-- Prawa kolumna: Mapa, Cennik i Godziny otwarcia -->
+<div class="col-md-6">
+    <!-- Mapa -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Lokalizacja</h5>
+            <p><strong>Adres:</strong> {{ atrakcja.adres }}</p>
+            <div id="map" style="height: 400px; width: 100%;"></div>
         </div>
     </div>
+
+    <!-- Cennik -->
+    {% if ceny %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Cennik</h5>
+            <ul class="list-unstyled">
+                {% for rodzaj, kwota, waluta in ceny %}
+                <li><strong>{{ rodzaj }}:</strong> {{ kwota }} {{ waluta }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Godziny otwarcia -->
+    {% if godziny %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Godziny otwarcia</h5>
+            <ul class="list-unstyled">
+                {% for g in godziny %}
+                    <li>
+                        {{ g.get_dzien_tygodnia_display }}:
+                        {% if g.czy_otwarte %}
+                            {{ g.godzina_otwarcia|time:"H:i" }} – {{ g.godzina_zamkniecia|time:"H:i" }}
+                        {% else %}
+                            Zamknięte
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
-<!-- Mapy i debug -->
+<!-- Google Maps -->
 <script>
 function initMap() {
     var lat = parseFloat("{{ atrakcja.lokalizacja.szerokosc_geo }}".replace(",", "."));
@@ -91,11 +141,5 @@ function loadGoogleMaps() {
     document.head.appendChild(script);
 }
 window.onload = loadGoogleMaps;
-</script>
-
-<script>
-console.log("Nazwa:", "{{ atrakcja.nazwa|escapejs }}");
-console.log("Lat:", "{{ atrakcja.lokalizacja.szerokosc_geo|safe }}");
-console.log("Lng:", "{{ atrakcja.lokalizacja.dlugosc_geo|safe }}");
 </script>
 {% endblock %}

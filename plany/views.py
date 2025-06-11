@@ -1,67 +1,38 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from django.http import HttpResponseRedirect, HttpResponse, HttpResponseForbidden
+from django.http import HttpResponseRedirect, HttpResponseForbidden
 from django.urls import reverse
-from django.utils.timezone import now
-from datetime import timedelta
-from django.template.loader import render_to_string
-from .models import PlanZwiedzania, PlanUzytkownika, EtapPlanu, ElementEtapu, PlanPodglad
-from atrakcje.models import Atrakcja
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.contrib import messages
-from collections import defaultdict
+from django.conf import settings
 import logging
 import googlemaps
-from django.conf import settings
-from weasyprint import HTML
+
+from .models import PlanZwiedzania, PlanUzytkownika
+from atrakcje.models import Atrakcja
+from .services.maps import (
+    build_etap_data, build_etap_map,
+    generate_map_and_update_travel_times
+)
+from .services.pdf_generator import render_plan_to_pdf
+from .services.plan_builder import PlanBuilder
+
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
-# ========== MAPA I TRASA ==========
-def generuj_mape_i_trase(plan):
-    gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
-    punkty = []
-    elementy = []
-
-    for etap in plan.etapy.all().order_by('kolejnosc'):
-        for el in etap.elementy.all().order_by('kolejnosc'):
-            lok = el.atrakcja.lokalizacja
-            if lok and lok.szerokosc_geo and lok.dlugosc_geo:
-                punkty.append((lok.szerokosc_geo, lok.dlugosc_geo))
-                elementy.append(el)
-
-    if len(punkty) < 2:
-        return None, []
-
-    # Directions API
-    directions = gmaps.directions(
-        origin=punkty[0],
-        destination=punkty[-1],
-        waypoints=punkty[1:-1] if len(punkty) > 2 else None,
-        mode="driving"
-    )
-
-    # Aktualizuj czas_dojazdu na podstawie Directions API
-    if directions and "legs" in directions[0]:
-        legs = directions[0]["legs"]
-        for i, leg in enumerate(legs):
-            if i + 1 < len(elementy):
-                czas_sec = leg.get("duration", {}).get("value", 0)
-                elementy[i + 1].czas_dojazdu = round(czas_sec / 60)  # w minutach
-                elementy[i + 1].save(update_fields=["czas_dojazdu"])
-
-    # Mapa statyczna
-    map_url = f"https://maps.googleapis.com/maps/api/staticmap?size=800x400&key={settings.GOOGLE_MAPS_API_KEY}"
-    for lat, lng in punkty:
-        map_url += f"&markers={lat},{lng}"
-
-    return map_url, directions
-
-
-# ========== WIDOKI ==========
 
 @login_required
 def dodaj_do_koszyka(request, atrakcja_id):
+    """
+    Adds an attraction to the user's session cart.
+
+    Args:
+        request (HttpRequest): The HTTP request.
+        atrakcja_id (int): ID of the attraction to be added.
+
+    Returns:
+        HttpResponseRedirect: Redirects to the attractions list.
+    """
     koszyk = request.session.get('koszyk', [])
     if atrakcja_id not in koszyk:
         koszyk.append(atrakcja_id)
@@ -69,27 +40,42 @@ def dodaj_do_koszyka(request, atrakcja_id):
         logger.info("Dodano atrakcję ID %s do koszyka użytkownika %s", atrakcja_id, request.user.username)
     return redirect('lista_atrakcji')
 
-
 @login_required
 def koszyk(request):
+    """
+    Displays the contents of the user's cart and a form for day assignment.
+
+    Args:
+        request (HttpRequest): The HTTP request.
+
+    Returns:
+        HttpResponse: Page with the attractions cart.
+    """
     koszyk_ids = request.session.get('koszyk', [])
     atrakcje = Atrakcja.objects.filter(id__in=koszyk_ids)
-
     liczba_dni = request.GET.get('dni', 3)
     try:
         liczba_dni = int(liczba_dni)
     except ValueError:
         liczba_dni = 3
-
     return render(request, 'plany/koszyk.html', {
         'atrakcje': atrakcje,
         'liczba_dni': liczba_dni,
         'dni_range': range(1, liczba_dni + 1)
     })
 
-
 @login_required
 def usun_z_koszyka(request, atrakcja_id):
+    """
+    Removes an attraction from the user's session cart.
+
+    Args:
+        request (HttpRequest): The HTTP request.
+        atrakcja_id (int): ID of the attraction to be removed.
+
+    Returns:
+        HttpResponseRedirect: Redirects to the cart page.
+    """
     koszyk = request.session.get('koszyk', [])
     if atrakcja_id in koszyk:
         koszyk.remove(atrakcja_id)
@@ -97,195 +83,174 @@ def usun_z_koszyka(request, atrakcja_id):
         logger.info("Usunięto atrakcję ID %s z koszyka użytkownika %s", atrakcja_id, request.user.username)
     return redirect('plany:koszyk')
 
+@login_required
 def szczegoly_planu(request, id):
+    """
+    Displays the details of the sightseeing plan with stage maps.
+
+    Args:
+        request (HttpRequest): The HTTP request.
+        id (int): ID of the plan.
+
+    Returns:
+        HttpResponse: Page with plan details.
+    """
     plan = get_object_or_404(
         PlanZwiedzania.objects.prefetch_related('etapy__elementy__atrakcja__lokalizacja'),
         id=id
     )
-    mapa_url, trasa = generuj_mape_i_trase(plan)
+    gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
+    etap_info = {}
+    mapy_etapow = {}
+    for etap in plan.etapy.all():
+        punkty, dojazd_info = build_etap_data(plan, etap, gmaps)
+        czas_zwiedzania = sum(el.czas_wizyty for el in etap.elementy.all())
+        czas_dojazdu = sum(el.czas_dojazdu or 0 for el in etap.elementy.all())
+
+        etap_info[etap.id] = {
+            "dojazd_info": dojazd_info,
+            "czas_zwiedzania": czas_zwiedzania,
+            "czas_dojazdu": czas_dojazdu,
+            "czas_laczny": czas_zwiedzania + czas_dojazdu
+        }
+        mapy_etapow[etap.id] = punkty
     return render(request, 'plany/szczegoly_planu.html', {
         'plan': plan,
-        'static_map_url': mapa_url,
-        'trasa': trasa,
-         'google_maps_key': settings.GOOGLE_MAPS_API_KEY
+        'mapy_etapow': mapy_etapow,
+        'etap_info': etap_info,
+        'google_maps_key': settings.GOOGLE_MAPS_API_KEY
     })
 
 
+@login_required
+def generuj_mape_i_trase(request, id):
+    """
+    Generates a route between attractions and updates travel times.
 
+    Args:
+        request (HttpRequest): The HTTP request.
+        id (int): ID of the plan.
+
+    Returns:
+        HttpResponse: Page with map and generated route.
+    """
+    plan = get_object_or_404(PlanZwiedzania, id=id)
+    map_url, directions = generate_map_and_update_travel_times(plan)
+    return render(request, 'plany/mapa_i_trasa.html', {'plan': plan, 'map_url': map_url, 'directions': directions})
 
 @login_required
 def zapisz_plan(request):
-    if request.method == 'POST':
-        logger.info("Użytkownik %s rozpoczął zapisywanie planu.", request.user.username)
-        nazwa = request.POST.get('nazwa', '').strip()
-        liczba_dni = int(request.POST.get('liczba_dni', 1))
-        wybrane_ids = request.session.get('koszyk', [])
+    """
+    Saves a new sightseeing plan based on the contents of the cart.
 
-        if not wybrane_ids:
-            messages.error(request, "Twój koszyk jest pusty.")
+    Args:
+        request (HttpRequest): HTTP request with form data.
+
+    Returns:
+        HttpResponseRedirect: Redirects to plan details or cart.
+    """
+    if request.method == 'POST':
+        koszyk_ids = request.session.get('koszyk', [])
+        if not koszyk_ids:
+            messages.warning(request, "Twój koszyk jest pusty.")
+            logger.warning("Użytkownik %s próbował zapisać plan bez atrakcji w koszyku", request.user.username)
             return redirect('plany:koszyk')
 
-        if not nazwa:
-            nazwa = f"Plan {request.user.username}"
+        przypisane_atrakcje = {}
+        for key, value in request.POST.items():
+            if key.startswith("dzien_"):
+                try:
+                    atrakcja_id = int(key.split("_")[1])
+                    dzien = int(value)
+                    przypisane_atrakcje.setdefault(dzien, []).append(atrakcja_id)
+                except ValueError:
+                    continue
 
-        plan = PlanZwiedzania.objects.create(nazwa=nazwa, opis="Utworzono z koszyka")
+        
+        starty = {}
+        for key, value in request.POST.items():
+            if key.startswith("start_dzien_"):
+                try:
+                    dzien = int(key.split("_")[-1])
+                    if value.strip():
+                        starty[dzien] = value.strip()
+                except ValueError:
+                    continue
 
-        PlanUzytkownika.objects.create(
-            uzytkownik=request.user,
-            plan=plan,
-            jest_wlascicielem=True
-        )
+        logger.info("Użytkownik %s zapisuje nowy plan. Przypisane atrakcje: %s", request.user.username, przypisane_atrakcje)
+        logger.debug("Adresy startowe: %s", starty)
 
-        przypisane_atrakcje = defaultdict(list)
-        for atrakcja_id in wybrane_ids:
-            dzien_str = request.POST.get(f'dzien_{atrakcja_id}')
-            try:
-                dzien = int(dzien_str)
-                przypisane_atrakcje[dzien].append(int(atrakcja_id))
-            except (TypeError, ValueError):
-                continue
+        nazwa = request.POST.get('nazwa') or f"Plan {request.user.username}"
+        adres_startowy = starty.get(1, request.POST.get('adres_startowy'))  # fallback
 
-        gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
-        czas_start = now()
-
-        for dzien, atrakcje_ids in sorted(przypisane_atrakcje.items()):
-            etap = EtapPlanu.objects.create(
-                plan=plan,
-                nazwa=f"Dzień {dzien}",
-                kolejnosc=dzien
+        try:
+            gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
+            builder = PlanBuilder(
+                user=request.user,
+                koszyk_ids=koszyk_ids,
+                nazwa=nazwa,
+                adres_startowy=adres_startowy,
+                przypisane_atrakcje=przypisane_atrakcje,
+                gmaps=gmaps,
+                starty=starty 
             )
+            plan = builder.build()
+            request.session['koszyk'] = []  
+            logger.info("Zapisano nowy plan ID: %s dla użytkownika %s", plan.id, request.user.username)
+            return redirect('plany:szczegoly_planu', id=plan.id)
 
-            poprzednia_lokalizacja = None
+        except Exception as e:
+            logger.error("Błąd podczas zapisywania planu dla użytkownika %s: %s", request.user.username, str(e))
+            messages.error(request, "Wystąpił błąd podczas zapisywania planu.")
+            return redirect('plany:koszyk')
 
-            for kolejnosc, atrakcja_id in enumerate(atrakcje_ids, start=1):
-                atrakcja = get_object_or_404(Atrakcja.objects.select_related('lokalizacja'), id=atrakcja_id)
-                czas_dojazdu = 0
-
-                if poprzednia_lokalizacja:
-                    try:
-                        directions = gmaps.directions(
-                            origin=(poprzednia_lokalizacja.szerokosc_geo, poprzednia_lokalizacja.dlugosc_geo),
-                            destination=(atrakcja.lokalizacja.szerokosc_geo, atrakcja.lokalizacja.dlugosc_geo),
-                            mode="driving"
-                        )
-                        if directions and directions[0]['legs']:
-                            czas_dojazdu = directions[0]['legs'][0]['duration']['value'] // 60  # w minutach
-                    except Exception as e:
-                        logger.warning("Błąd przy pobieraniu trasy: %s", e)
-                        czas_dojazdu = 15  # fallback
-
-                ElementEtapu.objects.create(
-                    etap=etap,
-                    atrakcja=atrakcja,
-                    kolejnosc=kolejnosc,
-                    planowana_data=czas_start,
-                    czas_wizyty=atrakcja.czas_zwiedzania or 30,
-                    czas_dojazdu=czas_dojazdu
-                )
-
-                czas_start += timedelta(minutes=(atrakcja.czas_zwiedzania or 30) + czas_dojazdu)
-                poprzednia_lokalizacja = atrakcja.lokalizacja
-
-        request.session['koszyk'] = []
-        logger.info("Utworzono plan %s (ID: %s)", plan.nazwa, plan.id)
-        return redirect('plany:szczegoly_planu', plan.id)
-
-
-
-
-import requests
-import base64
+    else:
+        return redirect('plany:koszyk')
 
 @login_required
 def export_plan_pdf(request, id):
+    """
+    Exports the plan to a PDF file along with stage maps.
+
+    Args:
+        request (HttpRequest): The HTTP request.
+        id (int): ID of the plan.
+
+    Returns:
+        HttpResponse: PDF as a downloadable response.
+    """
     plan = get_object_or_404(
         PlanZwiedzania.objects.prefetch_related('etapy__elementy__atrakcja__lokalizacja'),
         id=id
     )
-
     gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
-
     mapy_etapow = {}
     for etap in plan.etapy.all():
-        punkty = []
-        for el in etap.elementy.all():
-            lok = el.atrakcja.lokalizacja
-            if lok and lok.szerokosc_geo and lok.dlugosc_geo:
-                punkty.append((lok.szerokosc_geo, lok.dlugosc_geo))
-
-        if len(punkty) >= 2:
-            # Pobierz trasę od Google Directions API
-            try:
-                directions = gmaps.directions(
-                    origin=punkty[0],
-                    destination=punkty[-1],
-                    waypoints=punkty[1:-1] if len(punkty) > 2 else None,
-                    mode="driving"
-                )
-                polyline = directions[0]['overview_polyline']['points']
-            except Exception as e:
-                logger.warning(f"[MAPA] Nie udało się pobrać trasy dla etapu {etap.id}: {e}")
-                polyline = None
-        else:
-            polyline = None
-
-        if len(punkty) >= 1:
-            url = f"https://maps.googleapis.com/maps/api/staticmap?size=800x300&key={settings.GOOGLE_MAPS_API_KEY}"
-
-            for lat, lng in punkty:
-                url += f"&markers={lat},{lng}"
-
-            if polyline:
-                url += f"&path=enc:{polyline}"
-
-            try:
-                response = requests.get(url)
-                if response.status_code == 200:
-                    encoded = base64.b64encode(response.content).decode('utf-8')
-                    data_url = f"data:image/png;base64,{encoded}"
-                    mapy_etapow[etap.id] = data_url
-                else:
-                    logger.warning(f"Nie udało się pobrać mapy dla etapu {etap.id}: {response.status_code}")
-            except Exception as e:
-                logger.exception(f"Błąd pobierania mapy dla etapu {etap.id}: {e}")
-
-    html_string = render_to_string('plany/plan_pdf.html', {
-        'plan': plan,
-        'mapy_etapow': mapy_etapow,
-    })
-
-    pdf_file = HTML(string=html_string, base_url=request.build_absolute_uri()).write_pdf()
-
-    response = HttpResponse(pdf_file, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="plan_{plan.id}.pdf"'
-    return response
-
-
+        map_data = build_etap_map(etap, gmaps, plan.adres_startowy)
+        if map_data:
+            mapy_etapow[etap.id] = map_data
+    return render_plan_to_pdf(plan, mapy_etapow, request.build_absolute_uri())
 
 @login_required
 def usun_plan(request, id):
+    """
+    Deletes a user's sightseeing plan if they are the owner.
+
+    Args:
+        request (HttpRequest): The HTTP request.
+        id (int): ID of the plan.
+
+    Returns:
+        HttpResponse: Deletion confirmation or redirect to profile.
+    """
     plan = get_object_or_404(PlanZwiedzania, id=id)
     relacja = get_object_or_404(PlanUzytkownika, plan=plan, uzytkownik=request.user)
-
     if not relacja.jest_wlascicielem:
         logger.warning("Nieautoryzowana próba usunięcia planu ID: %s przez %s", plan.id, request.user.username)
         return HttpResponseForbidden("Nie masz uprawnień do usunięcia tego planu.")
-
     if request.method == "POST":
         logger.info("Użytkownik %s usunął plan: %s (ID: %s)", request.user.username, plan.nazwa, plan.id)
         plan.delete()
         messages.success(request, "Plan został usunięty.")
         return HttpResponseRedirect(reverse('profile'))
-
     return render(request, 'plany/potwierdz_usuniecie.html', {'plan': plan})
-
-
-def is_moderator_or_admin(user):
-    return user.is_authenticated and user.role in ['moderator', 'admin']
-
-
-@user_passes_test(is_moderator_or_admin)
-@login_required
-def podglad_planu(request):
-    podglad = PlanPodglad.objects.all().order_by('plan_id', 'etap_nr', 'atr_nr')
-    return render(request, 'plany/podglad.html', {'podglad': podglad})

@@ -1,9 +1,11 @@
 {% extends 'base.html' %}
+{% load dict_filters %}
 
 {% block title %}Lista atrakcji{% endblock %}
 
 {% block extra_css %}
 <style>
+    /* Custom styling for the attractions list */
     .back-link {
         display: inline-block;
         margin-bottom: 20px;
@@ -30,15 +32,7 @@
     }
     .atrakcja-info {
         display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-    }
-    .atrakcja-icon {
-        margin-right: 15px;
-        font-size: 24px;
-        width: 30px;
-        text-align: center;
-        color: #3498db;
+        flex-direction: column;
     }
     .atrakcja-text {
         font-size: 18px;
@@ -62,12 +56,15 @@
 {% endblock %}
 
 {% block content %}
+<!-- Link to return to the home page -->
 <a href="{% url 'strona_glowna' %}" class="back-link">
     <i class="fas fa-arrow-left"></i> Powrót do menu głównego
 </a>
 
+<!-- Main heading -->
 <h1>Lista atrakcji</h1>
 
+<!-- Filter form for city name -->
 <form method="get" style="margin-bottom: 20px;">
     <label>Miasto:
         <input type="text" name="miasto" value="{{ miasto }}">
@@ -75,37 +72,36 @@
     <button type="submit">Filtruj</button>
 </form>
 
+<!-- List of attractions -->
 <ul class="atrakcja-list">
     {% for atrakcja in atrakcje %}
         <li class="atrakcja-item">
+            <!-- Basic attraction info: name, category, city -->
             <div class="atrakcja-info">
-                <div class="atrakcja-icon">
-                    {% if atrakcja.kategoria.ikona %}
-                        <i class="{{ atrakcja.kategoria.ikona }}"></i>
-                    {% else %}
-                        <i class="fas fa-map-marker-alt"></i>
-                    {% endif %}
-                </div>
-                <div>
-                    <a href="{% url 'szczegoly' atrakcja.id %}" class="atrakcja-text">
-                        {{ atrakcja.nazwa }}
-                    </a><br>
-                    <span class="kategoria-text">
-                        {{ atrakcja.kategoria.nazwa }}
-                        {% if atrakcja.lokalizacja %} — {{ atrakcja.lokalizacja.miasto }}{% endif %}
-                    </span>
-                </div>
+                <a href="{% url 'szczegoly' atrakcja.id %}" class="atrakcja-text">
+                    {{ atrakcja.nazwa }}
+                </a>
+                <span class="kategoria-text">
+                    {{ atrakcja.kategoria.nazwa }}
+                    {% if atrakcja.lokalizacja %} — {{ atrakcja.lokalizacja.miasto }}{% endif %}
+                </span>
             </div>
+
+            <!-- Display minimum price or 'Free' fallback -->
             <div class="cena-info">
-                {% if statystyki_dict.atrakcja.id %}
-                    Cena od: {{ statystyki_dict.atrakcja.id.min_cena }} zł
-                {% else %}
-                    Bezpłatne
-                {% endif %}
+                {% with statystyki_dict|get_item:atrakcja.id as stat %}
+                    {% if stat %}
+                        Cena od: {{ stat.min_cena }} zł
+                    {% else %}
+                        Bezpłatne
+                    {% endif %}
+                {% endwith %}
             </div>
         </li>
     {% endfor %}
 </ul>
+
+<!-- Pagination controls -->
 <div class="pagination mt-4">
     <nav aria-label="Paginacja">
         <ul class="pagination justify-content-center">
@@ -137,5 +133,4 @@
         </ul>
     </nav>
 </div>
-
 {% endblock %}

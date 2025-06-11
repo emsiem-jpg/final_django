@@ -1,104 +1,96 @@
+import logging
 from django.contrib import admin
 from .models import (
     Kategoria, Lokalizacja, Atrakcja, StatusAtrakcji,
     ZdjecieAtrakcji, GodzinyOtwarcia, RodzajBiletu, Cennik
 )
-from django.utils.html import format_html
-from django.conf import settings
-import googlemaps
+
 from django import forms
 
+logger = logging.getLogger(__name__)
 
 class LokalizacjaInline(admin.StackedInline):
+    """Inline for entering the location of an attraction."""
     model = Lokalizacja
     extra = 0
     min_num = 1
-    max_num = 1  # ponieważ OneToOne
+    max_num = 1
 
-    def save_model(self, request, obj, form, change):
-        adres = f"{obj.ulica} {obj.numer_budynku}, {obj.kod_pocztowy} {obj.miasto}"
-        gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
-        try:
-            geocode_result = gmaps.geocode(adres)
-            if geocode_result:
-                location = geocode_result[0]['geometry']['location']
-                obj.szerokosc_geo = location['lat']
-                obj.dlugosc_geo = location['lng']
-        except Exception as e:
-            self.message_user(request, f"Błąd geokodowania: {str(e)}", level='error')
-        super().save_model(request, obj, form, change)
+
+class ZdjecieAtrakcjiInline(admin.TabularInline):
+    """Inline for adding multiple photos of the attraction."""
+    model = ZdjecieAtrakcji
+    extra = 1
+
+
+class GodzinyOtwarciaInline(admin.TabularInline):
+    """Inline for entering weekly opening hours."""
+    model = GodzinyOtwarcia
+    extra = 7
 
 
 class LokalizacjaForm(forms.ModelForm):
+    """Custom form for Lokalizacja with placeholders for easier input."""
     class Meta:
         model = Lokalizacja
         fields = '__all__'
         widgets = {
-            'miasto': forms.TextInput(attrs={'placeholder': 'np. Warszawa'}),
-            'ulica': forms.TextInput(attrs={'placeholder': 'np. Rynek Główny'}),
-            'numer_budynku': forms.TextInput(attrs={'placeholder': 'np. 1'}),
-            'kod_pocztowy': forms.TextInput(attrs={'placeholder': 'np. 00-001'}),
+            'miasto': forms.TextInput(attrs={'placeholder': 'e.g. Warsaw'}),
+            'ulica': forms.TextInput(attrs={'placeholder': 'e.g. Main Square'}),
+            'numer_budynku': forms.TextInput(attrs={'placeholder': 'e.g. 1'}),
+            'kod_pocztowy': forms.TextInput(attrs={'placeholder': 'e.g. 00-001'}),
         }
 
 
 class KategoriaAdmin(admin.ModelAdmin):
-    list_display = ('nazwa', 'display_icon')
-    fields = ('nazwa', 'ikona', 'icon_preview')
-    readonly_fields = ('icon_preview',)
-
-    def display_icon(self, obj):
-        return format_html('<i class="{}"></i>', obj.ikona) if obj.ikona else "-"
-    display_icon.short_description = 'Ikona'
-
-    def icon_preview(self, obj):
-        return format_html('<i class="{} fa-2x"></i>', obj.ikona) if obj.ikona else "Brak ikony"
-    icon_preview.short_description = 'Podgląd ikony'
+    """Admin interface for Kategoria."""
+    pass
 
 
 class AtrakcjaAdmin(admin.ModelAdmin):
-    inlines = [LokalizacjaInline]
-    list_display = ('nazwa', 'kategoria', 'display_adres', 'map_preview')
+    """Admin interface for Atrakcja, including inlines for related models."""
+    inlines = [LokalizacjaInline, ZdjecieAtrakcjiInline, GodzinyOtwarciaInline]
+    list_display = ('nazwa', 'kategoria', 'display_adres')
     list_filter = ('kategoria',)
     search_fields = ('nazwa', 'opis', 'lokalizacja__miasto', 'lokalizacja__ulica')
-    readonly_fields = ('map_preview',)
 
     def display_adres(self, obj):
-        return obj.adres()
-    display_adres.short_description = 'Adres'
-
-    def map_preview(self, obj):
-        if hasattr(obj, 'lokalizacja') and obj.lokalizacja.szerokosc_geo and obj.lokalizacja.dlugosc_geo:
-            return format_html(
-                '<iframe width="300" height="200" frameborder="0" style="border:0" '
-                'src="https://www.google.com/maps/embed/v1/view?key={}&center={},{}&zoom=15"></iframe>',
-                settings.GOOGLE_MAPS_API_KEY,
-                obj.lokalizacja.szerokosc_geo,
-                obj.lokalizacja.dlugosc_geo
-            )
-        return "Brak współrzędnych"
-    map_preview.short_description = 'Podgląd mapy'
+        """Displays formatted address from related Lokalizacja."""
+        try:
+            adres = obj.adres()
+            logger.debug(f"Displaying address for '{obj.nazwa}': {adres}")
+            return adres
+        except Exception as e:
+            logger.error(f"Error displaying address for '{obj}': {e}", exc_info=True)
+            return "—"
+    display_adres.short_description = 'Address'
 
 
 class ZdjecieAtrakcjiAdmin(admin.ModelAdmin):
+    """Admin interface for ZdjecieAtrakcji."""
     list_display = ('atrakcja', 'is_glowne', 'opis')
     search_fields = ('atrakcja__nazwa',)
 
 
 class StatusAtrakcjiAdmin(admin.ModelAdmin):
+    """Admin interface for StatusAtrakcji."""
     list_display = ('atrakcja', 'status', 'data_zmiany')
     list_filter = ('status',)
 
 
 class GodzinyOtwarciaAdmin(admin.ModelAdmin):
+    """Admin interface for GodzinyOtwarcia."""
     list_display = ('atrakcja', 'dzien_tygodnia', 'godzina_otwarcia', 'godzina_zamkniecia', 'czy_otwarte')
     list_filter = ('czy_otwarte',)
 
 
 class RodzajBiletuAdmin(admin.ModelAdmin):
+    """Admin interface for RodzajBiletu."""
     list_display = ('nazwa',)
 
 
 class CennikAdmin(admin.ModelAdmin):
+    """Admin interface for Cennik."""
     list_display = ('atrakcja', 'rodzaj_biletu', 'cena', 'waluta', 'ważny_od', 'ważny_do')
     list_filter = ('waluta',)
 
@@ -110,3 +102,5 @@ admin.site.register(StatusAtrakcji, StatusAtrakcjiAdmin)
 admin.site.register(GodzinyOtwarcia, GodzinyOtwarciaAdmin)
 admin.site.register(RodzajBiletu, RodzajBiletuAdmin)
 admin.site.register(Cennik, CennikAdmin)
+
+logger.info("Zarejestrowano modele admina: Kategoria, Atrakcja, Zdjęcia, Statusy, Godziny, Bilety, Cenniki")

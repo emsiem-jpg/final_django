@@ -1,6 +1,26 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% comment %}
+    Template: profile.html
+    Purpose: Displays the currently logged-in user's profile information and their sightseeing plans.
+
+    Sections:
+    1. Profile Information
+        - Displays username and email of the authenticated user.
+
+    2. User's Sightseeing Plans (moje_plany)
+        - Lists all plans related to the user.
+        - For each plan:
+            - Shows the plan name and creation date.
+            - If the user is the owner (jest_wlascicielem), displays a "delete" button.
+
+    Features:
+    - CSRF protection for delete forms.
+    - Uses Django template filters for date formatting.
+    - Includes a confirmation dialog before deletion.
+    - Gracefully handles the empty state when the user has no plans.
+{% endcomment%}
 <h2>Twój profil</h2>
 <div class="profile-info">
     <p><strong>Nazwa użytkownika:</strong> {{ user.username }}</p>

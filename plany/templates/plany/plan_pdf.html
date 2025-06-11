@@ -1,3 +1,10 @@
+<!--
+    Template: export_plan_pdf.html
+    Description: Renders a sightseeing plan in a clean printable layout (for PDF export).
+                 Includes each stage (etap), its attractions, estimated travel/visit times,
+                 and embedded static maps per stage (if available).
+-->
+
 {% load custom_filters %}
 <!DOCTYPE html>
 <html lang="pl">
@@ -55,6 +62,12 @@
         .attraction {
             margin-bottom: 10px;
         }
+        .arrow {
+            text-align: center;
+            font-size: 24px;
+            color: #bbb;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
@@ -65,14 +78,16 @@
         <p><strong>Opis:</strong> {{ plan.opis }}</p>
     {% endif %}
 
-    {% if static_map_url %}
-        <h2>Mapa trasy</h2>
-        <img src="{{ static_map_url }}" alt="Mapa atrakcji" class="map">
-    {% endif %}
-
     {% for etap in plan.etapy.all %}
     <div class="etap-box">
         <h2>{{ etap.kolejnosc }}. {{ etap.nazwa }}</h2>
+
+        {% with etap_info|get_item:etap.id as etap_dane %}
+            {% if etap_dane.dojazd_info %}
+                <p class="meta">⬇️ {{ etap_dane.dojazd_info }}</p>
+            {% endif %}
+        {% endwith %}
+
         <ul>
             {% for el in etap.elementy.all %}
                 <li class="attraction">
@@ -86,18 +101,12 @@
         </ul>
 
         {% if mapy_etapow|get_item:etap.id %}
-            <p style="font-size: 10px; color: gray;">
-                Mapa base64: {{ mapy_etapow|get_item:etap.id|slice:":100" }}...
-            </p>
-            <img src="{{ mapy_etapow|get_item:etap.id }}" alt="Mapa etapu" class="map">
+            <img src="{{ mapy_etapow|get_item:etap.id }}" alt="Mapa etapu {{ etap.kolejnosc }}" class="map">
         {% else %}
-            <p style="color: red;">⚠️ Brak mapy dla etapu {{ etap.kolejnosc }}</p>
+            <p style="color: red;"> Brak mapy dla etapu {{ etap.kolejnosc }}</p>
         {% endif %}
-
-
     </div>
-{% endfor %}
-
+    {% endfor %}
 
 </body>
 </html>

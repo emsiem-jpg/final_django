@@ -1,5 +1,3 @@
-{% load role_tags %}
-
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -7,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Przewodnik Turystyczny{% endblock %}</title>
 
+    <!-- Bootstrap and Font Awesome stylesheets -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
+        /* Base layout styles */
         html, body {
             height: 100%;
         }
@@ -20,7 +20,7 @@
         }
         main {
             flex: 1;
-            padding-top: 70px;
+            padding-top: 70px; /* Space for fixed navbar */
         }
         .footer {
             background-color: #f5f5f5;
@@ -28,17 +28,20 @@
         }
     </style>
 
-    {% block extra_css %}{% endblock %}
+    {% block extra_css %}{% endblock %}  {# Optional extra CSS from child templates #}
 </head>
 <body>
+
+<!-- Navigation bar -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
     <div class="container">
-        <a class="navbar-brand" href="{% url 'strona_glowna' %}">Przewodnik</a>
+        <a class="navbar-brand" href="{% url 'strona_glowna' %}">Przewodnik po mieście</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
         </button>
 
         <div class="collapse navbar-collapse" id="navbarNav">
+            <!-- Left side navigation links -->
             <ul class="navbar-nav me-auto">
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'lista_atrakcji' %}">Atrakcje</a>
@@ -48,24 +51,9 @@
                         🛒 Koszyk ({{ request.session.koszyk|length|default:"0" }})
                     </a>
                 </li>
-
-                {% if user.is_authenticated and user.role|is_in:"admin,moderator" %}
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="fas fa-tools"></i> Panel
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li>
-                            <a class="dropdown-item" href="{% url 'podglad_planu' %}">👁 Podgląd planów</a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" href="/admin/">⚙️ Panel administracyjny</a>
-                        </li>
-                    </ul>
-                </li>
-                {% endif %}
             </ul>
 
+            <!-- Right side user account navigation -->
             <ul class="navbar-nav">
                 {% if user.is_authenticated %}
                 <li class="nav-item dropdown">
@@ -74,26 +62,27 @@
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li>
-                            <a class="dropdown-item" href="{% url 'profile' %}">👤 Profil</a>
+                            <a class="dropdown-item" href="{% url 'konta:profile' %}">👤 Profil</a>
                         </li>
                         <li>
-                            <form method="post" action="{% url 'logout' %}" class="d-inline">
+                            <form method="post" action="{% url 'konta:logout' %}" class="d-inline">
                                 {% csrf_token %}
                                 <button type="submit" class="dropdown-item text-danger">
-                                    <i class="fas fa-sign-out-alt"></i> Wyloguj
+                                    <i class="fas fa-sign-out-alt"></i> Wyloguj się
                                 </button>
                             </form>
                         </li>
                     </ul>
                 </li>
                 {% else %}
+                <!-- Login/register options -->
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'login' %}">
-                        <i class="fas fa-sign-in-alt"></i> Zaloguj
+                    <a class="nav-link" href="{% url 'konta:login' %}">
+                        <i class="fas fa-sign-in-alt"></i> Login
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'register' %}">
+                    <a class="nav-link" href="{% url 'konta:register' %}">
                         <i class="fas fa-user-plus"></i> Rejestracja
                     </a>
                 </li>
@@ -103,28 +92,33 @@
     </div>
 </nav>
 
+<!-- Main content block -->
 <main class="container">
     {% if messages %}
         {% for message in messages %}
             <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
                 {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Zamknij"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         {% endfor %}
     {% endif %}
 
-    {% block content %}{% endblock %}
+    {% block content %}{% endblock %}  {# Page-specific content goes here #}
 </main>
 
+<!-- Footer -->
 <footer class="footer mt-auto">
     <div class="container text-center">
         <span class="text-muted">© 2025 Przewodnik</span>
     </div>
 </footer>
 
+<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+{# Optional blocks for scripts #}
 {% block google_maps %}{% endblock %}
 {% block extra_js %}{% endblock %}
+
 </body>
 </html>

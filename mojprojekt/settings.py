@@ -1,12 +1,65 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
+load_dotenv()  
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-_l@c48qd!zlin_s4^9wk%c@tz&$1v2lu!tq0+#-zs(%w=2xo3z'
-DEBUG = True
-ALLOWED_HOSTS = []
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name} - {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'app.log'),
+            'formatter': 'verbose',
+            'level': 'DEBUG', 
+        },
+    },
+
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        
+        'mojprojekt': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    }
+}
+
+SECRET_KEY = SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+DEBUG = os.environ.get("DEBUG", "False") == "True"
+
+
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
 
 
 INSTALLED_APPS = [
@@ -20,11 +73,16 @@ INSTALLED_APPS = [
     'konta',
     'plany',
     'rest_framework',
-    'drf_yasg'
+    'drf_yasg',
+    'widget_tweaks',
+]
+INSTALLED_APPS += [
+    'debug_toolbar',
 ]
 
 
 MIDDLEWARE = [
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -32,6 +90,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    
 ]
 
 ROOT_URLCONF = 'mojprojekt.urls'
@@ -40,7 +99,7 @@ ROOT_URLCONF = 'mojprojekt.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],  # To jest poprawnie!
+        'DIRS': [BASE_DIR / 'templates'],  
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -79,6 +138,7 @@ TIME_ZONE = 'Europe/Warsaw'
 USE_I18N = True
 USE_TZ = True
 USE_LI0N = False
+INTERNAL_IPS = ['127.0.0.1', 'localhost']
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
@@ -92,7 +152,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGOUT_REDIRECT_URL = 'login'
 LOGIN_URL = '/konta/login/'
 LOGIN_REDIRECT_URL = '/'
-GOOGLE_MAPS_API_KEY = 'AIzaSyCntZrZwwyNTqfW2d2cli4M66phmCiEie4'
-
+GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY')
 
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.jfif']
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)

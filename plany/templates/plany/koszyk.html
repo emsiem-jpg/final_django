@@ -26,9 +26,20 @@
                 <label for="nazwa" class="form-label">Nazwa planu</label>
                 <input type="text" name="nazwa" id="nazwa" class="form-control" required>
             </div>
+
             <div class="mb-3">
                 <label for="liczba_dni" class="form-label">Liczba dni</label>
-                <input type="number" name="liczba_dni" id="liczba_dni" class="form-control" min="1" value="1" required onchange="updateDzienSelects(this.value)">
+                <input type="number" name="liczba_dni" id="liczba_dni" class="form-control" min="1" value="{{ liczba_dni }}" required onchange="updateDzienFields(this.value)">
+            </div>
+
+            <div id="adresy-dni">
+                {% for dzien in dni_range %}
+                    <div class="mb-3">
+                        <label for="start_dzien_{{ dzien }}">Adres początkowy – Dzień {{ dzien }}</label>
+                        <input type="text" name="start_dzien_{{ dzien }}" id="start_dzien_{{ dzien }}" class="form-control"
+                               placeholder="np. Kraków, ul. Grodzka 1">
+                    </div>
+                {% endfor %}
             </div>
 
             <h5>Przypisz atrakcje do dni:</h5>
@@ -36,18 +47,42 @@
                 <div class="mb-2">
                     <label><strong>{{ atrakcja.nazwa }}</strong> - Dzień:</label>
                     <select name="dzien_{{ atrakcja.id }}" class="form-select dzien-select" required>
-                        {% for i in 1|to_range:10 %}
+                        {% for i in dni_range %}
                             <option value="{{ i }}">Dzień {{ i }}</option>
                         {% endfor %}
                     </select>
                 </div>
             {% endfor %}
 
-            <button type="submit" class="btn btn-primary mt-3">📅 Zapisz plan zwiedzania</button>
+            <button type="submit" class="btn btn-primary mt-3">Zapisz plan zwiedzania</button>
         </form>
 
         <script>
-            function updateDzienSelects(liczbaDni) {
+            function updateDzienFields(liczbaDni) {
+                const adresyDiv = document.getElementById('adresy-dni');
+                adresyDiv.innerHTML = '';
+                for (let i = 1; i <= liczbaDni; i++) {
+                    const label = document.createElement('label');
+                    label.className = 'form-label';
+                    label.setAttribute('for', `start_dzien_${i}`);
+                    label.innerText = `Adres początkowy – Dzień ${i}`;
+
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.name = `start_dzien_${i}`;
+                    input.id = `start_dzien_${i}`;
+                    input.className = 'form-control';
+                    input.placeholder = 'np. Kraków, ul. Grodzka 1';
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'mb-3';
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(input);
+
+                    adresyDiv.appendChild(wrapper);
+                }
+
+                
                 const selects = document.querySelectorAll(".dzien-select");
                 selects.forEach(select => {
                     select.innerHTML = "";
@@ -60,6 +95,7 @@
                 });
             }
         </script>
+
     {% else %}
         <div class="alert alert-info">
             Twój koszyk jest pusty. Wybierz atrakcje z listy lub ze szczegółów atrakcji.

@@ -1,3 +1,14 @@
+{#
+    Template: register.html
+    Purpose: User registration form.
+    Description:
+        - Renders a styled registration form using Bootstrap classes.
+        - Displays validation errors next to each input field.
+        - Includes CSRF protection.
+        - Preserves form field values on failed validation.
+        - Provides a link to the login page if the user already has an account.
+#}
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -52,7 +63,7 @@
 
                     <p class="mt-4 text-center">
                         Masz już konto?
-                        <a href="{% url 'login' %}" class="text-decoration-none">Zaloguj się tutaj</a>
+                        <a href="{% url 'konta:login' %}" class="text-decoration-none">Zaloguj się tutaj</a>
                     </p>
                 </div>
             </div>
